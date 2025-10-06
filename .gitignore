@@ -15,6 +15,5 @@ Thumbs.db
 .idea/
 
 # Project-specific (keep large, local-only)
-Blind test images/
 
 # Model checkpoints (comment out if using Git LFS)
