@@ -1,0 +1,22 @@
+﻿# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+.venv312/
+env/
+venv/
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Project-specific (keep large, local-only)
+Blind test images/
+Outputs/
+
+# Model checkpoints (comment out if using Git LFS)
+Results/kfold_training_outputs/
