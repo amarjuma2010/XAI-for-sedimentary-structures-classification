@@ -1,209 +1,224 @@
-Windows CPU Inference + Grad-CAM (EfficientNet-B2, ResNet-50, MobileNet-V3)
-==============================================================================
+Windows CPU Inference + Grad-CAM++ + XAI Evaluation Guide (v4)
+=============================================================
+Repository: XAI-for-sedimentary-structures-classification
 
-This guide reproduces your successful setup and runs on Windows + CPU with Python 3.12 and Grad-CAM++, using your folders:
+What this repo does
+-------------------
+1) Run Windows-CPU inference for 3 CNNs:
+   - EfficientNet-B2
+   - ResNet-50
+   - MobileNet-V3 (Large)
+2) Save (Original | Grad-CAM++) overlays per image
+3) Quantitatively evaluate explainability:
+   A) Deletion faithfulness (prob drop after masking top CAM pixels)
+   B) Stability (Pearson + SSIM between CAMs under small perturbations)
+4) Produce:
+   - A single deletion comparison plot (3 models)
+   - A compact summary table (only: Deletion AUC, Negative drop, Pearson, SSIM)
 
-- Blind test images: C:\Users\Hp\Desktop\Multi-model XAI\Blind test images
-- Script:           C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py
-- Models (5-fold training; choose a fold by its .pth path):
-    - efficientnet_b2_fold1.pth ... efficientnet_b2_fold5.pth
-    - resnet50_fold1.pth       ... resnet50_fold5.pth
-    - mobilenet_v3_fold1.pth   ... mobilenet_v3_fold5.pth
-- Outputs:          C:\Users\Hp\Desktop\Multi-model XAI\Outputs
-
-The v3 script:
-- uses your exact 11 classes (no need to pass --classes)
-- does NOT resize your images (as requested)
-- draws Grad-CAM++ overlays and saves per-model CSVs
-- allows you to choose **which fold** to run by changing the checkpoint path(s)
-
-
-1) One-time environment setup
------------------------------
-
-1.1 Install Python 3.12 (already done)
-You installed 3.12.7 and kept 3.13 as system default — that’s fine.
-
-1.2 Create & activate a 3.12 virtual environment (PowerShell):
-    cd "C:\Users\Hp\Desktop\Multi-model XAI\Scripts"
-    py -3.12 -m venv .venv312
-
-If activation is blocked (execution policy), use a temporary bypass:
-    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-    .\.venv312\Scripts\Activate.ps1
-
-Prompt should change to: (.venv312)
-
-1.3 Install packages (CPU builds + Grad-CAM):
-    python -m pip install --upgrade pip setuptools wheel
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-    pip install --no-cache-dir git+https://github.com/jacobgil/pytorch-grad-cam@master
-    pip install albumentations opencv-python matplotlib pandas scipy pillow
-
-Verify:
-    python -c "import torch, pytorch_grad_cam; print('Torch:', torch.__version__); print('Grad-CAM OK')"
-
-
-2) Script overview (v3)
+Expected repo structure
 -----------------------
+XAI-for-sedimentary-structures-classification/
+  Scripts/
+    infer_xai.py
+    make_xai_plots_and_table.py
+  metrics/
+    xai_*_deletion.csv
+    xai_*_stability.csv
+    deletion_comparison_3models_box.png      (generated)
+    xai_compact_summary.csv                  (generated)
+  README.md
+  .gitignore
 
-multi_model_inference_windows_cpu_v3.py key behavior:
-- Classes (fixed 11, exact order):
-  1. Conglomerate
-  2. Cross bedding
-  3. Lenticular bedding
-  4. Low-angle bedding
-  5. Wavy bedding
-  6. Bioturbated muddy media
-  7. Bioturbated sandy media
-  8. Massive mudstone
-  9. Massive sandstone
-  10. mud drape
-  11. Parallel lamination
-- No resizing: runs on the original image size
-- Grad-CAM++ per model, saved as side-by-side Original | Heatmap images
-- CSV per model with columns: filename, prediction, prob, runtime_ms
-- Auto-detects the number of classes from checkpoints; reconciles with your labels
-- **Fold selection**: You can run any of the 5 folds for each model by changing the checkpoint path (see §3.4).
+Important GitHub note:
+- Do NOT push large/private folders (datasets, Outputs, Results, .pth checkpoints).
+- It’s OK to push metrics CSVs and small plots/tables (recommended for transparency).
 
-Default paths inside the script match your folders, so you can run with no flags if you want all three models (defaulting to fold1 for each).
+------------------------------------------------------------
+1) Create and activate a virtual environment (recommended)
+------------------------------------------------------------
+Open PowerShell and go to the repo folder:
 
+  cd "C:\Users\YOURNAME\Desktop\XAI-for-sedimentary-structures-classification"
 
-3) How to run
+Create venv:
+
+  py -m venv .venv
+
+Activate:
+
+  .\.venv\Scripts\Activate.ps1
+
+Upgrade pip:
+
+  python -m pip install --upgrade pip
+
+------------------------------------------------------------
+2) Install dependencies (CPU)
+------------------------------------------------------------
+PyTorch CPU wheels:
+
+  pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+Common packages:
+
+  pip install numpy pandas matplotlib pillow scipy albumentations opencv-python
+
+Grad-CAM++:
+Import is `pytorch_grad_cam`, but pip package name is commonly:
+
+  pip install grad-cam
+
+If you still get ModuleNotFoundError, try:
+
+  pip install pytorch-grad-cam
+
+------------------------------------------------------------
+3) Checkpoints (.pth) and reproducibility (important)
+------------------------------------------------------------
+This repo intentionally does NOT ship large model checkpoints by default.
+
+How others can reproduce WITHOUT pushing .pth:
+A) Release weights elsewhere and link them:
+   - GitHub Releases (recommended)
+   - Zenodo / OSF (better for academic archiving, DOI)
+
+B) Provide full training code + exact dataset preparation steps
+   so others can retrain (your repo already includes training scripts).
+
+C) Provide a small “toy” demo checkpoint trained on a tiny public subset
+   (optional; only if you have the right permissions).
+
+Security note:
+Your inference script uses:
+  torch.load(..., weights_only=False)
+Only run that on TRUSTED checkpoints.
+
+------------------------------------------------------------
+4) Prepare an input folder of test images
+------------------------------------------------------------
+Create a folder with images to test, e.g.:
+
+  C:\Users\YOURNAME\Desktop\MyTestImages
+
+Supported: .jpg .jpeg .png
+
+------------------------------------------------------------
+5) Run inference + Grad-CAM++ overlays
+------------------------------------------------------------
+From the repo root:
+
+  python .\Scripts\infer_xai.py ^
+    --test_dir "C:\Users\YOURNAME\Desktop\MyTestImages" ^
+    --out_dir  "C:\Users\YOURNAME\Desktop\XAI_Outputs"
+
+Speed options:
+- Default runs CAM at --input_size (224) then upsamples to original for saving (fast CPU mode).
+- If you REALLY want no resize (slow), add:
+    --no_resize
+- If you want inference only (no CAM), add:
+    --no_cam
+
+Outputs:
+- Per-image overlay figures
+- Per-model CSV: preds_<model>.csv
+
+------------------------------------------------------------
+6) Run XAI evaluation metrics (Deletion + Stability)
+------------------------------------------------------------
+Run with your evaluation flag (example used in your runs):
+
+  python .\Scripts\infer_xai.py --xai_eval ^
+    --test_dir "C:\Users\YOURNAME\Desktop\MyTestImages" ^
+    --out_dir  ".\metrics"
+
+This produces:
+- metrics\xai_<model>_deletion.csv
+- metrics\xai_<model>_stability.csv
+
+How to interpret the metrics (practical)
+----------------------------------------
+A) Deletion faithfulness:
+- Compute Grad-CAM++ for predicted class
+- Mask the TOP fraction of pixels (deletion_fracs: e.g., 0.05, 0.10, 0.20, 0.30)
+- Recompute P(target class) after masking
+
+Good explanations should DROP probability quickly when important pixels are removed.
+
+Key indicators:
+- Lower curve (prob_after) = more faithful
+- Lower Deletion AUC (area under mean prob_after vs frac_masked) = more faithful
+- Lower Negative drop (%) = better (negative drop = cases where masking INCREASES probability)
+
+B) Stability:
+- Compare CAMs across small perturbations of the same image
+- Higher Pearson = more stable explanations
+- Higher SSIM = more stable explanations
+
+------------------------------------------------------------
+7) Make the 3-model deletion comparison plot + compact table
+------------------------------------------------------------
+This script reads metrics/*.csv and generates:
+- metrics\deletion_comparison_3models_box.png
+- metrics\xai_compact_summary.csv
+
+Run from repo root:
+
+  python -u .\Scripts\make_xai_plots_and_table.py
+
+Note:
+If you see a numpy warning about trapz being deprecated, it is harmless.
+(You can replace np.trapz with np.trapezoid later.)
+
+------------------------------------------------------------
+8) What to include in the manuscript (recommended)
+------------------------------------------------------------
+Add a new subsection in Results: “Quantitative explainability evaluation”.
+
+Figure:
+- One combined deletion plot (3 curves; mean ± SD)
+  File: metrics\deletion_comparison_3models_box.png
+
+Table:
+- Compact XAI table per model with ONLY:
+  • Deletion AUC (mean prob_after)
+  • Negative drop (%)
+  • Overall Pearson
+  • Overall SSIM
+  File: metrics\xai_compact_summary.csv
+
+------------------------------------------------------------
+9) GitHub hygiene (avoid pushing sensitive/large files)
+------------------------------------------------------------
+Do NOT push:
+- Raw datasets / blind test images
+- Generated overlay outputs
+- Model checkpoints (.pth)
+
+If you accidentally pushed them earlier:
+  git rm -r --cached "Blind test images" "Outputs" "Results"
+  git commit -m "Stop tracking datasets, outputs, and checkpoints"
+  git push
+
+Also: .gitignore lines are FILE CONTENTS, not commands.
+To edit .gitignore:
+  notepad .gitignore
+
+------------------------------------------------------------
+10) Troubleshooting
+------------------------------------------------------------
+A) ModuleNotFoundError: 'pytorch_grad_cam'
+  pip install grad-cam
+(or) pip install pytorch-grad-cam
+
+B) Paths with spaces fail
+Always quote paths:
+  --test_dir "C:\path with spaces\folder"
+
+C) No images found
+Check the folder and extensions (.jpg/.jpeg/.png)
+
+Citation note
 -------------
-
-3.1 Run all three models (default):
-    python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py"
-
-You’ll see sections in order:
-    ▶ efficientnet_b2: ...
-    ▶ resnet50: ...
-    ▶ mobilenet_v3: ...
-
-Tip: This can be slow on CPU (no resizing). Don’t type in the terminal while it runs.
-
-3.2 Run exactly the two commands you confirmed working:
-- EfficientNet + ResNet only (skip MobileNet):
-    python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --mob_ckpt "SKIP"
-
-- MobileNet only (skip EfficientNet & ResNet):
-    python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --eff_ckpt "SKIP" --res_ckpt "SKIP"
-
-“SKIP” is any non-existent path; the script checks os.path.exists(...) and quietly skips that model.
-
-3.3 ResNet-50 only:
-- Minimal (skip EfficientNet & MobileNet):
-    python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --eff_ckpt "SKIP" --mob_ckpt "SKIP"
-
-- Explicit (set your ResNet checkpoint path):
-    python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --res_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\resnet50_fold1.pth" --eff_ckpt "SKIP" --mob_ckpt "SKIP"
-
-3.4 Choose a specific **fold** (you have 5 folds per model)
-You can switch from fold to fold by changing the checkpoint file in the **model path** arguments. For example:
-
-- EfficientNet-B2 fold **2** (and run it alone):
-    python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --eff_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\efficientnet_b2_fold2.pth" --res_ckpt "SKIP" --mob_ckpt "SKIP"
-
-- ResNet-50 fold **3** (alone):
-    python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --res_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\resnet50_fold3.pth" --eff_ckpt "SKIP" --mob_ckpt "SKIP"
-
-- MobileNet-V3 fold **5** (alone):
-    python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --mob_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\mobilenet_v3_fold5.pth" --eff_ckpt "SKIP" --res_ckpt "SKIP"
-
-- Run **all three** but with custom folds (e.g., eff fold2, res fold4, mob fold5):
-    python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" ^
-      --eff_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\efficientnet_b2_fold2.pth" ^
-      --res_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\resnet50_fold4.pth" ^
-      --mob_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\mobilenet_v3_fold5.pth"
-
-(If you split across lines in PowerShell, use the backtick ` instead of caret ^, and ensure the backtick is the final character of the line.)
-
-Note: Make sure the fold checkpoints correspond to the same label order as the script’s 11 classes. The script auto-detects `num_classes` from the checkpoint and will reconcile counts, but label **order** should match what the model was trained on.
-
-
-4) Outputs
-----------
-
-Saved to:
-    C:\Users\Hp\Desktop\Multi-model XAI\Outputs
-
-4.1 Images (per model)
-- Filenames: <original_stem>_<model>.jpg
-  Examples:
-    CongBT5_resnet50.jpg
-    CongBT5_efficientnet_b2.jpg
-    CongBT5_mobilenet_v3.jpg
-- Each image shows Original and Grad-CAM++ heatmap with the predicted class as the title.
-
-4.2 CSVs (per model)
-- preds_efficientnet_b2.csv
-- preds_resnet50.csv
-- preds_mobilenet_v3.csv
-
-Columns:
-- filename: the input image name
-- prediction: your geological class name
-- prob: predicted confidence (0–1)
-- runtime_ms: per-image inference time on CPU
-
-
-5) Performance notes (CPU + no resize)
---------------------------------------
-
-- No resizing means the model processes full-resolution images. That’s accurate but slow on CPU.
-- To speed up while still saving heatmaps on the original size, you can add an optional inference-size in a future script update:
-  (a) run the network at a smaller working size (e.g., 512), and
-  (b) upsample the CAM before overlaying on the original.
-
-
-6) PowerShell tips
-------------------
-
-- Backtick continuation: in PowerShell, the backtick (`) must be the last character on the line (no trailing spaces).
-- If a command errors with “expected one argument”, put it on one line or fix the line continuations.
-- Avoid random keystrokes while a long job is running — they can interrupt and start new commands.
-
-
-7) Troubleshooting (what we hit & the fixes)
---------------------------------------------
-
-Symptom: Could not find a version that satisfies pytorch-grad-cam
-Cause:   PyPI resolver + Python version / index URL
-Fix:     pip install --no-cache-dir git+https://github.com/jacobgil/pytorch-grad-cam@master
-
-Symptom: unicodeescape in script
-Cause:   Python docstring contained Windows paths like \U...
-Fix:     Use raw triple quotes r\"\"\"...\"\"\" or use the v3 script
-
-Symptom: EfficientNet size-mismatch (fc.weight shape)
-Cause:   Classes passed incorrectly (treated a file path as one class)
-Fix:     v2/v3 auto-detect class count from checkpoint and reconcile names
-
-Symptom: MobileNet size-mismatch (classifier.0 vs final)
-Cause:   Picked the wrong classifier layer from checkpoint
-Fix:     v3 prioritizes final head keys (e.g., fc.weight, classifier.3.weight)
-
-Symptom: Only EfficientNet seemed to run
-Cause:   CPU + no resize is slow; later models hadn’t started/finished, or terminal input interrupted
-Fix:     Let it run to completion, or run models separately using the SKIP trick above
-
-
-8) Repro checklist (quick)
---------------------------
-1) Activate env:
-   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-   .\.venv312\Scripts\Activate.ps1
-
-2) Verify Grad-CAM installed:
-   python -c "import torch,pytorch_grad_cam;print('OK')"
-
-3) Run all three (defaults to fold1 for each):
-   python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py"
-
-4) Or run specific folds via checkpoint paths:
-   - EfficientNet fold2 only:
-     python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --eff_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\efficientnet_b2_fold2.pth" --res_ckpt "SKIP" --mob_ckpt "SKIP"
-   - ResNet fold3 only:
-     python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --res_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\resnet50_fold3.pth" --eff_ckpt "SKIP" --mob_ckpt "SKIP"
-   - MobileNet fold5 only:
-     python "C:\Users\Hp\Desktop\Multi-model XAI\Scripts\multi_model_inference_windows_cpu_v3.py" --mob_ckpt "C:\Users\Hp\Desktop\Multi-model XAI\Results\kfold_training_outputs\mobilenet_v3_fold5.pth" --eff_ckpt "SKIP" --res_ckpt "SKIP"
+If you publish results with Grad-CAM, cite:
+Selvaraju et al., 2017 (Grad-CAM) and the pytorch-grad-cam library.
