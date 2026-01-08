@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 __pycache__/
 *.pyc
 
@@ -14,6 +14,20 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Project-specific (keep large, local-only)
+# Large local folders (do NOT push)
+Blind test images/
+Outputs/
+Results/
+**/Blind test images/
+**/Outputs/
+**/Results/
 
-# Model checkpoints (comment out if using Git LFS)
+# Model checkpoints (do NOT push unless using Git LFS intentionally)
+*.pth
+*.pt
+*.ckpt
+*.weights
+*.onnx
+
+# Logs
+*.log
